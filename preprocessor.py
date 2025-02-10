@@ -21,12 +21,12 @@ def load_and_preprocess(image_path, mask_path, target_size=224):
         new_w, new_h = int(w * scale), int(h * scale)
         resized = img.resize((new_w, new_h))
 
-        # Create padding
+        #create padding
         pad_w, pad_h = size - new_w, size - new_h
         pad_left, pad_right = pad_w // 2, pad_w - pad_w // 2
         pad_top, pad_bottom = pad_h // 2, pad_h - pad_h // 2
 
-        # Convert to numpy and add padding
+        #add padding
         img_np = np.array(resized)
         padded_img = cv2.copyMakeBorder(img_np, pad_top, pad_bottom, pad_left, pad_right, 
                                         cv2.BORDER_CONSTANT, value=(0, 0, 0))
@@ -38,10 +38,22 @@ def load_and_preprocess(image_path, mask_path, target_size=224):
     return image, mask
 
 def extract_class_from_mask(mask):
-    mask_np = np.array(mask)
+    """
+    Reads a mask and determines if a cat or dog is present by checking 
+    non-background pixels. Assigns the label based on the largest non-background region.
+    """
+    mask_np = np.array(mask)  # Convert to array
+
     unique_labels, counts = np.unique(mask_np, return_counts=True)
-    dominant_label = unique_labels[np.argmax(counts)]  # Most frequent label
-    return dominant_label  # 0: Background, 1: Cat, 2: Dog
+
+    label_counts = {label: count for label, count in zip(unique_labels, counts) if label != 0}
+
+    if not label_counts: 
+        return 0  # Background
+
+    dominant_label = max(label_counts, key=label_counts.get)
+    
+    return dominant_label
 
 def augment_image_and_mask(image, mask):
     augmented = transform(image=np.array(image), mask=np.array(mask))
@@ -64,7 +76,7 @@ class CatDogDataset(Dataset):
         mask_path = os.path.join(self.mask_dir, self.mask_paths[idx])
 
         image, mask = load_and_preprocess(image_path, mask_path, self.target_size)
-        label = extract_class_from_mask(mask)  # Get dominant class
+        label = extract_class_from_mask(mask) 
 
         if self.transform:
             image, mask = augment_image_and_mask(image, mask)
@@ -75,19 +87,16 @@ transform = A.Compose([
     A.HorizontalFlip(p=0.5),
     A.RandomBrightnessContrast(p=0.2),
     A.RandomResizedCrop((224, 224), scale=(0.8, 1.0)),
-    A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),  # Standard ImageNet normalization
+    A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),  #ImageNet normalization
     ToTensorV2(),
 ])
 
-# Define dataset
 dataset = CatDogDataset("C:/Users/louis/Documents/UNI4/CV/CW/Dataset/Dataset/TrainVal/color/", "C:/Users/louis/Documents/UNI4/CV/CW/Dataset/Dataset/TrainVal/color/", transform=transform)
 
-# Create a DataLoader
 dataloader = DataLoader(dataset, batch_size=32, shuffle=True)
 print(dataloader)
 
-# Assign higher weight to less common classes
-class_weights = torch.tensor([0.2, 0.4, 0.4])  # Adjust based on dataset distribution
+class_weights = torch.tensor([0.2, 0.4, 0.4]) #Adjust if needed
 loss_fn = CrossEntropyLoss(weight=class_weights)
 
 # Define output folder for preprocessed dataset
@@ -103,17 +112,13 @@ os.makedirs(mask_output_dir, exist_ok=True)
 print(f"Processed dataset will be saved in: {output_dir}")
 
 def save_preprocessed_data(image_path, mask_path, output_image_dir, output_mask_dir, target_size=224):
-    # Load and preprocess images/masks
     image, mask = load_and_preprocess(image_path, mask_path, target_size)
 
-    # Get filename (without extension)
     filename = os.path.basename(image_path).split('.')[0]
 
-    # Define output paths
     processed_image_path = os.path.join(output_image_dir, f"{filename}.jpg")
     processed_mask_path = os.path.join(output_mask_dir, f"{filename}.png")
 
-    # Save images and masks
     image.save(processed_image_path, "JPEG")
     mask.save(processed_mask_path, "PNG")
 
@@ -123,12 +128,10 @@ import csv
 
 csv_path = os.path.join(output_dir, "labels.csv")
 
-# Create a CSV file and write header
 with open(csv_path, 'w', newline='') as csvfile:
     writer = csv.writer(csvfile)
-    writer.writerow(["filename", "label"])  # Header
+    writer.writerow(["filename", "label"])
 
-# Process all images in dataset and save results
 image_dir = "C:/Users/louis/Documents/UNI4/CV/CW/Dataset/Dataset/TrainVal/color/"  # Input images directory
 mask_dir = "C:/Users/louis/Documents/UNI4/CV/CW/Dataset/Dataset/TrainVal/label/"  # Input masks directory
 
@@ -138,13 +141,11 @@ with open(csv_path, 'a', newline='') as csvfile:
 
     for image_file in sorted(os.listdir(image_dir)):
         image_path = os.path.join(image_dir, image_file)
-        mask_path = os.path.join(mask_dir, image_file.replace(".jpg", ".png"))  # Assume masks are .png
+        mask_path = os.path.join(mask_dir, image_file.replace(".jpg", ".png"))
         
         if not os.path.exists(mask_path):
-            #print(":o")
-            continue  # Skip if mask is missing
+            continue
 
-        # Save preprocessed image and mask
         processed_image, processed_mask = save_preprocessed_data(image_path, mask_path, image_output_dir, mask_output_dir)
 
         # Extract classification label
