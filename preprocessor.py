@@ -44,16 +44,15 @@ def extract_class_from_mask(mask):
     """
     mask_np = np.array(mask)  # Convert to array
 
-    unique_labels, counts = np.unique(mask_np, return_counts=True)
 
-    label_counts = {label: count for label, count in zip(unique_labels, counts) if label != 0}
+    mask_np[mask_np == 255] = 0
 
-    if not label_counts: 
-        return 0  # Background
-
-    dominant_label = max(label_counts, key=label_counts.get)
-    
-    return dominant_label
+    if 1 in mask_np:
+        return 1
+    elif 2 in mask_np:
+        return 2
+    else:
+        return 0
 
 def augment_image_and_mask(image, mask):
     augmented = transform(image=np.array(image), mask=np.array(mask))
